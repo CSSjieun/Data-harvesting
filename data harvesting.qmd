@@ -1,0 +1,217 @@
+---
+title: "data harvesting"
+format: html
+editor: visual
+---
+
+## Data Harvesting
+
+### Chapter2
+
+```{r}
+devtools::install_github("cimentadaj/scrapex")
+install.packages("scrapex")
+install.packages(c("httr2", "xml2", "rvest"))
+library(scrapex) #R package with completely self-standing web scrapping/API examples for enternity
+library(rvest)
+library(httr)
+library(httr2)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+
+link <- history_elections_spain_ex()
+link
+browseURL(prep_browser(link))
+
+set_config(
+  user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15")
+)
+
+html_website <- link %>% read_html()
+html_website
+
+all_tables <-
+  html_website %>%
+  html_table()
+
+#extract the table information which is in slot 5.
+elections_data <- all_tables[[5]]
+elections_data |> View() 
+
+#keep only the columns which are character
+elections_data %>% select_if(is.character) |> View()
+wrong_labels <- c(
+  "Dissolved",
+  "[k]",
+  "[l]",
+  "[m]",
+  "n",
+  "Banned",
+  "Boycotted",
+  "Did not run"
+)
+
+wrong_labels <- paste0(wrong_labels, collapse = "|")
+wrong_labels
+
+semi_cleaned_data <-
+  elections_data %>%
+  mutate_if(
+    is.character,
+    ~ str_replace_all(string = .x, pattern = wrong_labels, replacement = NA_character_)
+  )
+
+semi_cleaned_data %>% select_if(is.character)
+
+semi_cleaned_data <-
+  semi_cleaned_data %>%
+  mutate(
+    Election = str_replace_all(string = Election, pattern = "Apr. |Nov. ", replacement = "")
+  ) 
+
+semi_cleaned_data %>% select_if(is.character)
+
+semi_cleaned_data <-
+  semi_cleaned_data %>%
+  mutate_all(as.numeric) %>%
+  filter(!is.na(Election))
+
+semi_cleaned_data
+
+semi_cleaned_data <-
+  semi_cleaned_data %>%
+  rename_all(~ str_replace_all(.x, "\\[.+\\]", ""))
+
+semi_cleaned_data
+
+#visualization
+# Pivot from wide to long to plot it in ggplot
+cleaned_data <-
+  semi_cleaned_data %>%
+  pivot_longer(-Election, names_to = "parties")
+
+# Plot it
+cleaned_data %>%
+  ggplot(aes(Election, value, color = parties)) +
+  geom_line() +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  scale_color_viridis_d() +
+  theme_minimal()
+```
+
+### Chapter 2 Exercise 1
+
+```{r}
+#exercise
+aging <- read_html(retirement_age_europe_ex())
+
+all_tables <-
+  aging %>%
+  html_table()
+
+aging_europe <- all_tables[[2]]
+
+aging_europe |> select_if(is.character)
+wrong_labels <- c(
+  "(and 4 months)",
+  "(and 8 months)",
+  "(and 9 months)",
+  "(and 7 months)",
+  "(and 6 months)",
+  "(and 10 months)",
+  "(and 3 months)",
+  ", options age 62-68.",
+  "(and 5 months)"
+)
+
+wrong_labels <- paste0(wrong_labels, collapse = "|")
+wrong_labels
+
+semi_cleaned_data_aging <-
+  aging_europe %>%
+  mutate_if(
+    is.character,
+    ~ str_replace_all(string = .x, pattern = wrong_labels, replacement = NA_character_)
+  )
+
+semi_cleaned_data_aging |> select_if(is.character)
+
+#clean the data
+aging_europe |> 
+  select(Country, Men, Women) |> 
+  mutate(
+    Country,
+    Men = as.numeric(str_sub(Men, 1, 2)), #Remove behind of 1 of Men 
+    Women = as.numeric(str_sub(Women, 1, 2)) 
+  ) |> 
+  pivot_longer(Men:Women) |> 
+  ggplot(aes(reorder(Country, -value), value, color = name)) +
+  geom_point() +
+  scale_x_discrete(name = "Country") +
+  scale_y_continuous(name = "Age at retirement") +
+  coord_flip() +
+  theme_minimal()
+```
+
+2.  When parsing the elections table, we parsed all tables of the Wikipedia table into `all_tables`. Among all those tables, there\'s one table that documents the years at which there were general elections, presidential elections, european elections, local elections, regional elections and referendums in Spain. Can you extract into a *numeric* vector all the years at which there were general elections in Spain? (Hint: you might need `str_split` and other `stringr` functions and the resulting vector should start by 1810 and end with 2019)
+
+```{r}
+important_dates <- all_tables[[6]]
+names(important_dates) <- c("type_election", "years") #rename
+
+all_years <-
+  important_dates |>  str_split(pattern = "\n")
+  filter(type_election == "General elections") 
+  pull(years) |> 
+  str_split(pattern = "\n") |> #split the strings
+  lapply(str_sub, 1, 4) |> 
+  lapply(as.numeric)
+
+important_dates |> str_split(pattern = "\n")
+
+overlapping_years <- intersect(all_years[[1]], intersect(all_years[[2]], all_years[[3]]))
+
+overlapping_years
+```
+
+3.  Building on your previous code, can you tell me the years where local elections, european elections and general elections overlapped?
+
+    ```{r}
+
+    ```
+
+## Chapter 3. Data format for Webscraping
+
+```{r}
+install.packages("xlm2")
+library(xlm2)
+```
+
+```{=html}
+html_test <- "<html>
+  <head>
+    <title>Div Align Attribbute</title>
+  </head>
+  <body>
+    <div align='left'>
+      First text
+    </div>
+    <div align='right'>
+      Second text
+    </div>
+    <div align='center'>
+      Third text
+    </div>
+    <div align='justify'>
+      Fourth text
+    </div>
+  </body>
+</html>
+"
+```
+```{r}
+xml_raw <- read_xml(xml_test)
+xml_structure(xml_raw)
+```
