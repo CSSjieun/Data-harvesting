@@ -155,7 +155,7 @@ aging_europe |>
   theme_minimal()
 ```
 
-2.  When parsing the elections table, we parsed all tables of the Wikipedia table into `all_tables`. Among all those tables, there\'s one table that documents the years at which there were general elections, presidential elections, european elections, local elections, regional elections and referendums in Spain. Can you extract into a *numeric* vector all the years at which there were general elections in Spain? (Hint: you might need `str_split` and other `stringr` functions and the resulting vector should start by 1810 and end with 2019)
+2.  When parsing the elections table, we parsed all tables of the Wikipedia table into `all_tables`. Among all those tables, there's one table that documents the years at which there were general elections, presidential elections, european elections, local elections, regional elections and referendums in Spain. Can you extract into a *numeric* vector all the years at which there were general elections in Spain? (Hint: you might need `str_split` and other `stringr` functions and the resulting vector should start by 1810 and end with 2019)
 
 ```{r}
 important_dates <- all_tables[[6]]
@@ -185,8 +185,8 @@ overlapping_years
 ## Chapter 3. Data format for Webscraping
 
 ```{r}
-install.packages("xlm2")
-library(xlm2)
+install.packages("xml2")
+library(xml2)
 ```
 
 ```{=html}
@@ -212,6 +212,805 @@ html_test <- "<html>
 "
 ```
 ```{r}
+#1. Extract the values for the align attributes in html_raw (Hint, look at the function xml_children).
+library(xml2)
+library(scrapex)
+html_test <- "<html><head><title>Div Align Attribbute</title></head><body><div align='left'>First text</div><div align='right'>Second text</div><div align='center'>Third text</div><div align='justify'>Fourth text</div></body></html>"
+
+html_raw <- read_html(html_test)
+
+xml_test <- "<people><jason><person type='fictional'><first_name><married>Jason</married></first_name><last_name>Bourne</last_name><occupation>Spy</occupation></person></jason><carol><person type='real'><first_name><married>Carol</married></first_name><last_name>Kalp</last_name><occupation>Scientist</occupation></person></carol></people>"
+
+cat(xml_test)
+
 xml_raw <- read_xml(xml_test)
-xml_structure(xml_raw)
+div_nodes <- xml_child(xml_raw, search = 2)
+xml_attrs(xml_children(div_nodes), "align")
+
+#2. Extract the occupation of Carol Kalp from xml_raw
+carol_node <- xml_child(xml_raw, search = 2)
+person_node <- xml_child(carol_node, search = 1)
+occupation <- xml_child(person_node, search = 3)
+xml_text(occupation)
+
+#3. Extract the text of all <div> tags from html_raw. Your result should look specifically like this:
+div_nodes <- xml_child(html_raw, search = 2)
+xml_text(xml_children(div_nodes), "align")
+
+#4. Manually create an XML string which contains a root node, then two children nested within and then two grandchildren nested within each child. The first child and the second grandchild of the second child should have an attribute called family set to ‘1’. Read that string and find those two attributes but only with the function xml_find_all and xml_attrs.
+custom_xml <- "<root><child1 family='1'><granchild1></granchild1><granchild2></granchild2></child1><child2><granchild1></granchild1><granchild2 family='1'></granchild2></child2></root>"
+
+custom_raw <- read_xml(custom_xml)
+
+# First attribute
+xml_attrs(xml_find_all(custom_raw, "/root/child1"))
+
+# Second attribute
+xml_attrs(xml_find_all(custom_raw, "/root/child2/granchild2"))
+
+#5. The output of all the previous exercises has been either a xml_nodeset or an html_document (you can read it at the top of the print out of your results):
+#Can you extract the text of the last name of Carol the scientist only using R subsetting rules on your object? For example some_object$people$person$... (Hint: xml2 has a function called as_list).
+xml_list <- as_list(xml_raw)
+xml_list$people$carol$person$last_name[[1]]
+```
+
+# **Chapter 4. What you need to know about regular expressions? (regex, regexp)**
+
+```{r}
+#library
+library(stringr) #related to regex(regexp)
+library(scrapex)
+library(rvest)
+library(xml2)
+library(lubridate)
+install.packages("vistime")
+library(vistime)
+library(tibble)
+```
+
+Regular expressions (regexp from now on) are a way for you to find patterns within strings. 
+
+Let\'s take a famous quote by **Jorge Luis Borges** and find the word **\"eighteenth\"** in the quote:
+
+```{r}
+borges <- "I like hourglasses, maps, eighteenth century typography."
+str_view_all(borges, "eighteenth", match = TRUE)
+
+str_replace_all(borges, "eighteenth", "[DATE]")
+str_extract_all(borges, "eighteenth")
+```
+
+### 4.2. The . placeholder
+
+```{r}
+borges <- "I like hourglasses, maps, eighteenth Eighteenth century typography."
+str_view_all(borges, ".ighteenth", match = TRUE)
+
+borges <- "I like hourglasses, maps, ighteenth century typography."
+str_view_all(borges, ".ighteenth", match = TRUE)
+```
+
+The regexp I used is `.ighteenth` meaning that I want to match *any character* (`.`) followed directly by `ighteenth`. It matches both the capital letter word as well the lower case word. However, it would also match *any other* character, even empty spaces:
+
+### 4.3. Quantifiers
+
+`+` which means that the character `.` needs to be repeated one or more times.
+
+```{r}
+#However, you might want to make it generic to extract any word between maps and century. You could try something like this:
+borges_two_phrase <- c(
+  "I like hourglasses, maps, eighteenth century typography.",
+  "I like hourglasses, maps, seventeenth century typography."
+)
+
+str_view_all(borges_two_phrase, "maps, . century")
+
+#What we want instead is thin:
+str_view_all(borges_two_phrase, "maps, .+ century")
+```
+
+### 4.4. Escapting
+
+```{r}
+#If I asked you to match the first sentence of this phrase without specifying “hourglasses”, what regexp could you use?
+borges <- "I like hourglasses. I also like maps, eighteenth century typography"
+str_view_all(borges, "I like .+")
+
+#\\.: until there is a literal dot.
+str_view_all(borges, "I like .+\\.")
+```
+
+It says: match the phrase `I like` followed by any character repeated one or more times.
+
+To match a literal `.` you need to append it with two `\\`. It would look like this: `I like .+\\.`. This reads like this:
+
+-   Match the phrase `I like`
+
+-   Followed be any character that is repeated one or more times (`.+`)
+
+-   Until there is a literal dot (`\\.`)
+
+### 4.5. The OR(\|) operator
+
+```{r}
+# To make your regexp generic, you’ll often want to match either one regexp or another.
+borges_two_phrase <- c(
+  "I like hourglasses, maps, eighteenth century typography.",
+  "I like hourglasses, maps, seventeenth century typography."
+)
+
+res <- str_extract_all(borges_two_phrase, "maps, .+ century")
+res
+
+# However, we want to extract only the actual century and replace maps, and century.
+# replace either maps, or century with an empty space
+res %>% str_replace_all("maps, | century", "")
+
+```
+
+### 4.6. Anchors
+
+`^` is used to match the start of the string and `$` to match the end of the string.
+
+```{r}
+borges <- "I like hourglasses. I also like maps, eighteenth century typography"
+
+# to match the first letter of the entire text you could use:
+str_view_all(borges, "^.", match = TRUE)
+
+# to match the last letter of a string:
+str_view_all(borges, ".$", match = TRUE)
+
+borges_long <- c(
+  "I like cars. I like hourglasses, maps, eighteenth century typography.",
+  "I like computers. I like hourglasses, maps, eighteenth century typography."
+)
+str_view_all(borges_long, "^I like .+")
+str_view_all(borges_long, "^I like .+\\.")
+```
+
+### 4.7. Matching spaces
+
+You can also match spaces in regexp and replace them:
+
+```{r}
+str_view_all(borges, " ")
+
+#Since spaces come in different ways (new lines or a tabs), you can also use the special character \\s:
+str_replace_all(borges, "\\s", "")
+```
+
+### 4.8. Special Classes
+
+**\\\\d: matches digits**
+
+Suppose you\'re scraping a list of countries and their GDP. After scraping that data you end up with this:
+
+```{r}
+gdp <- c(
+  "Afghanistan 516 US dollars",
+  "Albania 6494 US dollars",
+  "Algeria 3765 US dollars",
+  "American Samoa 12844 US dollars",
+  "Andorra 43047 US dollars"
+)
+
+#if we wanted to match the age of a child in a string (Angel is 8 years old), writing a regexp like \\d will match that 8.
+str_view_all("Angel is 8 years old", "\\d")
+
+#If we matched instead someone older, \\d will match each digit separately:
+str_view_all(
+  c("Angel is 8 years old", "Martha is 56 years old"),
+  "\\d"
+)
+
+# We could combine this with the quantifier + to match one or more digits. 
+str_view_all(
+  c("Angel is 8 years old", "Martha is 56 years old"),
+  "\\d+"
+)
+
+#Going back to our gdp example, we can extract the GDP of every country with the regexp \\d+, meaning “extract any number that is repeated one or more times”:
+gdp_chr <- str_extract_all(gdp, "\\d+")
+lapply(gdp_chr, as.numeric)
+
+# Say we wanted to match all retirement ages of men in Europe that are between 67 and 69:
+retirement <-
+  # Read in our scrapex example with retirement ages
+  retirement_age_europe_ex() %>%
+  read_html() %>%
+  html_table() %>%
+  .[[2]]
+
+retirement
+
+#Note that [] works the same way for anything: numbers, letters, punctuation, spaces, etc..
+
+# One way is to explicitly use | to match all ages like this: (67|68|69). Instead, using brackets ([])
+str_view_all(retirement$Men, "6[789]")
+
+# additional shortcut
+str_view_all(retirement$Men, "6[7-9]")
+
+# if we wanted to match all ages except those after 65, the regexp would be like this:
+str_view_all(retirement$Men, "6[^5-9]")
+
+```
+
+## **4.9 Case study: mapping the kings of France**
+
+```{r}
+history_france_html <- history_france_ex()
+history_france <- read_html(history_france_html)
+browseURL(prep_browser(history_france_html))
+
+# bring me all the ul tags that have an a tag that has a title that contains the phrase “House of Valois”. Let’s break it down and write it:
+history_france %>%
+  xml_find_all("//ul[.//a[contains(@title, 'House of Valois')]]")
+
+# We can redo the previous XPath to pick only the second node and we should be done:
+all_txt <-
+  history_france %>%
+  xml_find_all("//ul[.//a[contains(@title, 'House of Valois')]][2]") %>%
+  xml_text()
+
+all_txt
+
+# Let’s clean it up.
+# 1. First thing we want to do is split the string based on the character \n.
+all_txt <-
+  all_txt %>%
+  str_split("\n") %>%
+  .[[1]]
+
+all_txt
+
+# House of Valois and House of Bourbon. We probably want to remove these two strings from the vector because we’re not interested in distinguishing them for now. 
+
+#For that we’ll use the regexp ^House which matches any string that begins with House. 
+#We’ll combine it with str_detect which returns TRUE or FALSE if there’s a match. 
+#We’ll use that to exclude these two strings from the vector:
+all_txt <- all_txt[!str_detect(all_txt, "^House")]
+all_txt
+
+# Let’s first extract the years. 
+# We could do that with the regexp \\d+ that will extract all digits from each of the strings. 
+all_txt[7]
+
+# Since these years are just a clarification, we can remove the parenthesis and everything inside it to just keep the first period next to his name.
+
+
+# Parenthesis are special characters in regexp so to match them we have to escape them like this: \\( or \\)
+# We don’t care what text is inside the parenthesis so we can just use the . placeholder with + to match as many character are needed
+all_txt <-
+  all_txt %>%
+  str_replace_all(pattern = "\\(.+\\)", replacement = "")
+
+all_txt
+
+# Extract all the years
+res <-
+  all_txt %>%
+  str_extract_all("\\d+")
+
+res
+
+#For kings/queens which reigned in a single century, the end period only has the last two years. 
+#For those whose kingship lasted between two centuries, the two years are written explicitly in format YYYY. 
+#We have to correct this manually.
+
+convert_time_period <- function(x) {
+  start_year <- x[1]
+  end_year <- x[2]
+  # If end year has only 2 digits
+  if (nchar(end_year) == 2) {
+    # Extract the first two years from the start year
+    end_year_prefix <- str_sub(start_year, 1, 2)
+    # Paste together the correct year for the end year
+    end_year <- paste0(end_year_prefix, end_year)
+  }
+  # Replace correct end year
+  x[2] <- end_year
+  as.numeric(x)
+}
+
+sequence_kings <- lapply(res, convert_time_period)
+sequence_kings
+
+# Next thing we need is to extract all the names.
+all_txt %>%
+  str_extract("^.+,")
+
+# We just have to replace the comma with an empty space to make it cleaner:
+names_kings <-
+  all_txt %>%
+  str_extract("^.+,") %>%
+  str_replace_all(",", "")
+
+names_kings
+
+# Let’s look over sequence_kings and convert them into data frames. 
+# Combine all of them with the king names and convert all dates into date objects in R:
+
+# Combine into data frames
+sequence_kings_df <- lapply(sequence_kings, function(x) data.frame(start = x[1], end = x[2]))
+final_kings <- do.call(rbind, sequence_kings_df)
+
+# Add king names
+final_kings$event <- names_kings
+final_kings$start <- make_date(final_kings$start, 1, 1)
+final_kings$end <- make_date(final_kings$end, 1, 1)
+
+# Final data frame
+final_kings <- as_tibble(final_kings)
+final_kings
+
+#package vistime
+gg_vistime(final_kings, col.group = "event", show_labels = FALSE)
+```
+
+-   `//ul`: bring all `ul` tags from the document
+
+-   `[.//a]`: subset all `a` tags that are *below* all `ul` tags (notice the `.`)
+
+-   `[contains(@title, "House of Valois")]`: where this `a` tag needs to have a `title` attribute that contains \"House of Valois\".
+
+-   The final regexp can be something like this: `\\(.+\\)`. Match any parenthesis (literal) that have any text inside.
+
+-   `^`: from the beginning of the string
+
+```{=html}
+<!-- -->
+```
+-   `.+`: match all characters repeated one or more times
+
+-   `,`: until the first comma
+
+### 4.10. Exercises
+
+```{r}
+# 1. Extend our case study to the period “State building into the Kingdom of France (987–1453)”:, 
+# Note that this will require you to change some of our previous code and think of slightly different regexp strategies. When done, merge it with our results of the case study to produce the complete lineage of France’s history of monarchy.
+
+history_france %>%
+  xml_find_all("//ul[.//a[contains(@title, 'Capetian Dynasty')]]")
+
+all_txt <-
+  history_france %>%
+  xml_find_all("//ul[.//a[contains(@title, 'House of Valois')]][1]") %>%
+  xml_text() %>%
+  str_split("\n") %>%
+  .[[1]]
+
+all_txt
+
+all_txt <- all_txt[!str_detect(all_txt, "House")]
+all_txt <- all_txt[str_detect(all_txt, "\\d+")]
+
+res <-
+  all_txt %>%
+  str_extract_all("\\d+")
+
+res
+
+convert_time_period <- function(x) {
+  if (length(x) == 1) {
+    start_year <- x[1]
+    end_year <- x[1]
+  } else {
+    start_year <- x[1]
+    end_year <- x[2]
+  }
+
+  # If end year has only 2 digits
+  if (nchar(end_year) == 2) {
+    # Extract the first two years from the start year
+    end_year_prefix <- str_sub(start_year, 1, 2)
+    # Paste together the correct year for the end year
+    end_year <- paste0(end_year_prefix, end_year)
+  }
+  # Replace correct end year
+  x[2] <- end_year
+  as.numeric(x)
+}
+
+sequence_kings <- lapply(res, convert_time_period)
+
+# Name of kings
+names_kings <-
+  all_txt %>%
+  str_extract("^.+,") %>%
+  str_replace_all(",", "")
+
+# Combine into data frames
+sequence_kings_df <- lapply(sequence_kings, function(x) data.frame(start = x[1], end = x[2]))
+final_kings_earlier <- do.call(rbind, sequence_kings_df)
+
+# Add king names
+final_kings_earlier$event <- names_kings
+final_kings_earlier$start <- make_date(final_kings_earlier$start, 1, 1)
+final_kings_earlier$end <- make_date(final_kings_earlier$end, 1, 1)
+
+# Final data frame
+final_kings_earlier <- as_tibble(final_kings_earlier)
+
+# Merge with earlier results
+final_kings_total <- rbind(final_kings_earlier, final_kings)
+
+# Plot
+gg_vistime(final_kings_total, col.group = "event", show_labels = FALSE)
+
+
+
+#2. Take a look at this regexp: I like .+\\.. It says: match the phrase I like followed by any character (.) repeated one or more times (+) until you find a dot (\\.). When applied to the string below it extracts the entire string:
+text <- "I like hourglasses. I also like maps, eighteenth century typography."
+str_extract_all(text, "I like .+\\.")[[1]]
+
+str_extract_all(text, "I like .+?\\.")[[1]]
+
+#3. Can you extract all unique royal houses from the Wikipedia document? That is, produce a vector like this one:
+history_france_html <- history_france_ex()
+history_france <- read_html(history_france_html)
+
+history_france %>%
+  xml_text() %>%
+  str_extract_all("House of .+?\\s") %>%
+  .[[1]] %>%
+  str_trim() %>%
+  str_replace_all("[:punct:]", "") %>%
+  unique()
+```
+
+## Chapter 5. What you need to know about XPath
+
+XPath (XML Path Language) is the language designed to identify the address of one or several tags within an HTML or XML document. 
+
+```{=html}
+<bookshelf>
+  <dansimmons>
+    <book>
+      Hyperion Cantos
+    </book>
+  </dansimmons>
+</bookshelf>
+```
+### 5.1. Finding tags with XPath
+
+```{r}
+library(xml2)
+library(magrittr)
+library(scrapex)
+```
+
+```{r}
+raw_xml <- "<bookshelf><dansimmons><book>Hyperion Cantos</book></dansimmons></bookshelf>"
+
+book_xml <- read_xml(raw_xml)
+direct_address <- "/bookshelf/dansimmons/book"
+
+book_xml %>%
+  xml_find_all(direct_address)
+```
+
+```{r}
+# Note the new `<authors>` tag, a child of `<bookshelf>`.
+raw_xml <- "<bookshelf><authors><dansimmons><book>Hyperion Cantos</book></dansimmons></authors></bookshelf>"
+
+book_xml <- raw_xml %>% read_xml()
+
+book_xml %>%
+  xml_find_all(direct_address)
+```
+
+Can\'t we build a more general expression?
+
+Instead, you can extract only the `<dansimmons>` tag directly with `//dansimmons`. That will return all `<dansimmons>` tags of the entire XML document.
+
+```{r}
+book_xml %>%
+  xml_find_all("//dansimmons")
+```
+
+`//` is very handy, it means: search the entire document and bring me back all `<dansimmons>`tags.
+
+```{r}
+# Note the new `<release_year>` tag below the second (also new) `<book>` tag
+raw_xml <- "<bookshelf><authors><dansimmons><book> Hyperion Cantos </book><book><release_year>1996</release_year>Endymion</book></dansimmons></authors></bookshelf>"
+
+book_xml <- raw_xml %>% read_xml()
+
+book_xml |> xml_find_all("//dansimmons")
+
+book_xml %>%
+  xml_find_all("//dansimmons/book")
+
+#  If book would not be the direct child of <dansimmons>, / wouldn’t work.
+book_xml %>%
+  xml_find_all("//dansimmons/release_year")
+
+book_xml %>%
+  xml_find_all("//dansimmons/book/release_year")
+
+book_xml %>%
+  xml_find_all("//dansimmons//release_year")
+
+book_xml %>%
+  xml_find_all("//dansimmons//release_year") %>%
+  xml_path()
+```
+
+```{r}
+book_xml %>%
+  xml_find_all("//dansimmons/book[2]")
+
+# empty if the position does not exist
+book_xml %>%
+  xml_find_all("//dansimmons/book[8]")
+
+# XPath introduces the * as a wildcard pattern to return all children of current parent tag.
+book_xml %>%
+  xml_find_all("//dansimmons/*")
+
+# Similarly, * can be used to fill out a tag which you don’t know the name of.
+# In other words, this XPath is saying: extract all book tags which have three tags above it, it doesn’t matter which tags they
+book_xml %>%
+  xml_find_all("/*/*/*/book")
+```
+
+-   `/` links between two tags that have direct parent-child relationship
+
+-   `//` finds all tags in the HTML/XML tree regardless of depth
+
+-   Use `[number]` to subset the position of a node. For example: `//a[8]` will return the 8th `<a>`tag.
+
+-   `*` is a wildcard that allows to signal nodes without specifying which nodes.
+
+## **5.2 Filter by attributes**
+
+```{r}
+# Note the new <stephenking> tag with it's book 'The Stand' and all <book> tags have some attributes
+raw_xml <- "
+<bookshelf>
+  <authors>
+    <dansimmons>
+      <book price='yes' topic='scifi'>
+        Hyperion Cantos
+      </book>
+      <book topic='scifi'>
+        <release_year>
+         1996
+        </release_year>
+        Endymion
+      </book>
+    </dansimmons>
+    <stephenking>
+    <book price='yes' topic='horror'>
+     The Stand
+    </book>
+    </stephenking>
+  </authors>
+</bookshelf>"
+
+book_xml <- raw_xml %>% read_xml()
+```
+
+Everything inside `[]` serves to add additional filters/criteria that matches your XPath.
+
+```{r}
+# Whenever we want our tags to match a specific attribute we can add two brackets at the end of the tag and match the attribute to what we’re after.
+book_xml %>%
+  xml_find_all("//dansimmons//book[@price='yes']") %>%
+  xml_text()
+
+book_xml %>%
+  xml_find_all("//book[@price='yes' and @topic='horror']") %>%
+  xml_text()
+
+book_xml %>%
+  xml_find_all("//book[@price]")
+
+book_xml %>%
+  xml_find_all("//book[@price!='yes']")
+
+book_xml %>%
+  xml_find_all("//book[@price='yes' or @topic='scifi']") %>%
+  xml_text()
+```
+
+-   `contains()`
+
+-   `starts-with()`
+
+-   `text()`
+
+-   `not()`
+
+-   `count()`
+
+```{r}
+newspaper_link <- elpais_newspaper_ex()
+newspaper <- read_html(newspaper_link)
+
+browseURL(prep_browser(newspaper_link))
+
+newspaper %>%
+  xml_find_all("//section//a[contains(@href, 'science')]")
+
+newspaper %>%
+  xml_find_all("//section/*/*/a[contains(@href, 'science')]")
+```
+
+-   `//section` means to search for all sections throughout the HTML tree
+
+-   `//section/*/*` means to search for two *direct* children of `<section>` (regardless of what these tags are)
+
+-   `a[contains(@href, 'science')]` finds the `<a>` tags for which the `@href` attribute contains the text \'science\'.
+
+-   The final expression says: finds all `<a>` tags for which the `@href` attribute contains the text \'science\' which are descendant of the `<section>` tag with two tags in between.
+
+```{r}
+newspaper %>%
+  xml_find_all("//section/*/*/a[contains(text(), 'Science, Tech & Health')]") %>%
+  xml_attr("href")
+
+newspaper %>%
+  xml_find_all("//section//a[contains(text(), 'Science, Tech & Health')]") %>%
+  xml_attr("href")
+
+newspaper %>%
+  xml_find_all("//section/*/*/a[not(contains(text(), 'Science, Tech & Health'))]") %>%
+  xml_attr("href")
+
+newspaper %>%
+  xml_find_all("//section[count(.//article)>3]")
+
+newspaper %>%
+  xml_find_all("//section[count(.//article)>3]") %>%
+  xml_attr("data-dtm-region")
+
+
+```
+
+-   `//section` find all section tags in the XML document
+
+-   `[count(.//article])]` counts all articles *but* all articles below the current tag. That\'s why we write `.//article` because the dot (`.`) signals that we will search for all articles below the current position. If instead we wrote `//article` it would search for *all* articles in the entire HTML tree.
+
+-   `[count(.//article])]>3` counts all sections that have more than three articles
+
+## **5.3 XPath cookbook**
+
+```{r}
+# Find all sections
+newspaper %>%
+  xml_find_all("//section")
+
+# Return all divs below all sections
+newspaper %>%
+  xml_find_all("//section//div")
+
+# Return all sections which a div as a child
+newspaper %>%
+  xml_find_all("//section/div")
+
+# Return the child (any, because of *) of all sections
+newspaper %>%
+  xml_find_all("//section/*")
+
+# Return all a tags of all section tags which have two nodes in between
+newspaper %>%
+  xml_find_all("//section/*/*/a")
+
+# Return all a tags below all section tags without a class attribute
+newspaper %>%
+  xml_find_all("//section//a[not(@class)]")
+
+# Return all a tags below all section tags that contain a class attribute
+newspaper %>%
+  xml_find_all("//section//a[@class]")
+
+# Return all a tags of all section tags which have two nodes in between
+# and contain some text in the a tag.
+newspaper %>%
+  xml_find_all("//section/*/*/a[contains(text(), 'Science')]")
+
+# Return all span tags in the document with a specific class
+newspaper %>%
+  xml_find_all("//span[@class='c_a_l']")
+
+# Return all span tags in the document that don't have a specific class
+newspaper %>%
+  xml_find_all("//span[@class!='c_a_l']")
+
+# Return all a tags where an attribute starts with something
+newspaper %>%
+  xml_find_all("//a[starts-with(@href, 'https://')]")
+
+# Return all a tags where an attribute contains some text
+newspaper %>%
+  xml_find_all("//a[contains(@href, 'science-tech')]")
+
+# Return all section tags which have tag *descendants (because of the .//)* that have a class attribute
+newspaper %>%
+  xml_find_all("//section[.//a[@class]]")
+
+# Return all section tags which have <td> children
+newspaper %>%
+  xml_find_all("//section[td]")
+
+# Return the first occurrence of a section tag
+newspaper %>%
+  xml_find_all("(//section)[1]")
+
+# Return the last occurrence of a section tag
+newspaper %>%
+  xml_find_all("(//section)[last()]")
+```
+
+## **5.5 Exercises**
+
+```{r}
+newspaper_link <- elpais_newspaper_ex()
+newspaper <- read_html(newspaper_link)
+```
+
+1.  How many `jpg` and `png` images are there in the website? (Hint: look at the source code and figure out which tag and *attribute* contains the links to the images).
+
+```{r}
+newspaper %>%
+  xml_find_all("//img[contains(@src, 'jpg')]") %>%
+  length()
+
+newspaper %>%
+  xml_find_all("//img[contains(@src, 'png')]") %>%
+  length()
+```
+
+2.  How many articles are there in the entire website?
+
+```{r}
+newspaper %>%
+  xml_find_all("//article") %>%
+  length()
+```
+
+3.  Out of all the headlines (by headlines I mean the bold text that each article begins with), how many contain the word \'climate\'?
+
+```{r}
+newspaper %>%
+  xml_find_all("//h2[@class='c_t ']/a[contains(text(), 'climate')]")
+```
+
+4.  What is the city with more reporters?
+
+```{r}
+library(stringr)
+newspaper %>%
+  xml_find_all("//span[@class='c_a_l']") %>%
+  xml_text() %>%
+  # Some cities are combined together with , or /
+  str_split(pattern = ",|/") %>%
+  unlist() %>%
+  # Remove all spaces before/after the city for counting properly
+  trimws() %>%
+  table() |> data.frame()
+```
+
+5.  What is the headline of the article with the most words in the description? (Hint: remember that `.//` searcher for all tags but *only below* the current tag. `//` will search for all tags in the document, regardless of whether it\'s above the current selected node). The text you\'ll want to measure the amount of letters is below the bold headline of each news article:
+
+```{r}
+art_p <-
+  newspaper %>%
+  # Grab only the articles that have a p tag *below* each article.
+  # p tags are for paragraphs and contains the description of a file
+  xml_find_all("//article[.//p]")
+
+lengthy_art <-
+  art_p %>%
+  xml_text() %>%
+  nchar() %>%
+  which.max()
+
+art_p[lengthy_art] %>%
+  xml_find_all(".//h2/a") %>%
+  xml_text()
 ```
